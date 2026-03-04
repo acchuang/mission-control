@@ -92,6 +92,10 @@ export async function PATCH(
       updates.push('priority = ?');
       values.push(validatedData.priority);
     }
+    if (validatedData.execution_profile !== undefined) {
+      updates.push('execution_profile = ?');
+      values.push(validatedData.execution_profile);
+    }
     if (validatedData.due_date !== undefined) {
       updates.push('due_date = ?');
       values.push(validatedData.due_date);

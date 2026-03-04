@@ -1,0 +1,17 @@
+[
+  {
+    "name": "Mission Queue visible",
+    "ok": true,
+    "detail": 1
+  },
+  {
+    "name": "All three feature panels visible",
+    "ok": true,
+    "detail": "ok"
+  },
+  {
+    "name": "Task modal execution modes visible",
+    "ok": true,
+    "detail": "ok"
+  }
+]

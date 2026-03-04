@@ -47,6 +47,8 @@
 
 📡 **Live Feed** — Real-time event stream showing agent activity, task updates, and system events
 
+🧯 **Ops Active Tasks** — New Ops tab reads `active-tasks.json` (cron/tmux/GitHub/CI producers) and updates every 10s
+
 🌐 **Multi-Machine** — Run the dashboard and AI agents on different computers (supports Tailscale for remote)
 
 ---
@@ -224,6 +226,7 @@ Drag tasks between columns or let the system auto-advance them.
 | `DATABASE_PATH` | — | `./mission-control.db` | SQLite database location |
 | `WORKSPACE_BASE_PATH` | — | `~/Documents/Shared` | Base directory for workspace files |
 | `PROJECTS_PATH` | — | `~/Documents/Shared/projects` | Directory for project folders |
+| `MC_ACTIVE_TASKS_PATH` | — | `/home/alan/.openclaw/workspace/tasks/active-tasks.json` | Path to producer output consumed by Ops tab |
 
 ### Security (Production)
 

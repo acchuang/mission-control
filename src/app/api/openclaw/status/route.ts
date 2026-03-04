@@ -13,7 +13,7 @@ export async function GET() {
         return NextResponse.json({
           connected: false,
           error: 'Failed to connect to OpenClaw Gateway',
-          gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789',
+          gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:4000',
         });
       }
     }
@@ -25,13 +25,13 @@ export async function GET() {
         connected: true,
         sessions_count: sessions.length,
         sessions: sessions,
-        gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789',
+        gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:4000',
       });
     } catch (err) {
       return NextResponse.json({
         connected: true,
         error: 'Connected but failed to list sessions',
-        gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:18789',
+        gateway_url: process.env.OPENCLAW_GATEWAY_URL || 'ws://127.0.0.1:4000',
       });
     }
   } catch (error) {

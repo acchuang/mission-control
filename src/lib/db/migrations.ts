@@ -202,6 +202,20 @@ const migrations: Migration[] = [
         console.log('[Migration 007] Added gateway_agent_id to agents');
       }
     }
+  },
+  {
+    id: '008',
+    name: 'add_task_execution_profile',
+    up: (db) => {
+      console.log('[Migration 008] Adding execution_profile to tasks...');
+
+      const tasksInfo = db.prepare("PRAGMA table_info(tasks)").all() as { name: string }[];
+
+      if (!tasksInfo.some(col => col.name === 'execution_profile')) {
+        db.exec(`ALTER TABLE tasks ADD COLUMN execution_profile TEXT DEFAULT 'auto'`);
+        console.log('[Migration 008] Added execution_profile to tasks');
+      }
+    }
   }
 ];
 

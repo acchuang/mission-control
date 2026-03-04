@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, KanbanSquare, Users, Activity } from 'lucide-react';
 import { Header } from '@/components/Header';
 import { AgentsSidebar } from '@/components/AgentsSidebar';
 import { MissionQueue } from '@/components/MissionQueue';
@@ -29,6 +29,8 @@ export default function WorkspacePage() {
 
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [menuDockSide, setMenuDockSide] = useState<'left' | 'right'>('left');
+  const [mobileTab, setMobileTab] = useState<'queue' | 'agents' | 'feed'>('queue');
 
   // Connect to SSE for real-time updates
   useSSE();
@@ -106,8 +108,20 @@ export default function WorkspacePage() {
       }
     }
 
+    async function runOpenClawSync() {
+      try {
+        await fetch('/api/openclaw/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error('OpenClaw sync failed:', error);
+      }
+    }
+
     loadData();
     checkOpenClaw();
+    runOpenClawSync();
 
     // SSE is the primary real-time mechanism - these are fallback polls with longer intervals
     // to reduce server load while providing redundancy
@@ -148,6 +162,18 @@ export default function WorkspacePage() {
       }
     }, 60000); // Increased from 10000 to 60000
 
+    // Sync OpenClaw sessions/cron health into tasks/events every 30s
+    const openclawSyncPoll = setInterval(async () => {
+      try {
+        await fetch('/api/openclaw/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } catch (error) {
+        console.error('Failed to run OpenClaw sync poll:', error);
+      }
+    }, 30000);
+
     // Check OpenClaw connection every 30 seconds (kept as-is for monitoring)
     const connectionCheck = setInterval(async () => {
       try {
@@ -165,6 +191,7 @@ export default function WorkspacePage() {
       clearInterval(eventPoll);
       clearInterval(connectionCheck);
       clearInterval(taskPoll);
+      clearInterval(openclawSyncPoll);
     };
   }, [workspace, setAgents, setTasks, setEvents, setIsOnline, setIsLoading]);
 
@@ -201,21 +228,73 @@ export default function WorkspacePage() {
   }
 
   return (
-    <div className="h-screen flex flex-col bg-mc-bg overflow-hidden">
+    <div className="min-h-[100dvh] flex flex-col bg-mc-bg overflow-hidden px-3 py-3 md:px-4 md:py-4 gap-3">
       <Header workspace={workspace} />
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Agents Sidebar */}
-        <AgentsSidebar workspaceId={workspace.id} />
+      <div className="md:hidden px-3 py-2 border-b border-mc-border bg-mc-bg-secondary">
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={() => setMobileTab('queue')}
+            className={`inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded text-xs ${mobileTab === 'queue' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary text-mc-text-secondary'}`}
+          >
+            <KanbanSquare className="w-3.5 h-3.5" /> Queue
+          </button>
+          <button
+            onClick={() => setMobileTab('agents')}
+            className={`inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded text-xs ${mobileTab === 'agents' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary text-mc-text-secondary'}`}
+          >
+            <Users className="w-3.5 h-3.5" /> Agents
+          </button>
+          <button
+            onClick={() => setMobileTab('feed')}
+            className={`inline-flex items-center justify-center gap-1.5 px-2 py-2 rounded text-xs ${mobileTab === 'feed' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary text-mc-text-secondary'}`}
+          >
+            <Activity className="w-3.5 h-3.5" /> Feed
+          </button>
+        </div>
+      </div>
 
-        {/* Main Content Area */}
+      <div className="flex-1 overflow-hidden md:hidden">
+        {mobileTab === 'queue' && <MissionQueue workspaceId={workspace.id} />}
+        {mobileTab === 'agents' && <AgentsSidebar workspaceId={workspace.id} dockSide="left" onDockChange={setMenuDockSide} />}
+        {mobileTab === 'feed' && <LiveFeed />}
+      </div>
+
+      <div className="hidden md:flex flex-1 overflow-hidden panel-shell">
+        {menuDockSide === 'left' && (
+          <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+        )}
+
         <MissionQueue workspaceId={workspace.id} />
 
-        {/* Live Feed */}
+        {menuDockSide === 'right' && (
+          <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+        )}
+
         <LiveFeed />
       </div>
 
-      {/* Debug Panel - only shows when debug mode enabled */}
+      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 hidden md:flex items-center gap-2 rounded-xl border border-mc-border bg-mc-bg-secondary/95 backdrop-blur-sm px-2 py-2 shadow-lg">
+        <button
+          onClick={() => setMobileTab('queue')}
+          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+        >
+          Queue
+        </button>
+        <button
+          onClick={() => setMobileTab('agents')}
+          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+        >
+          Agents
+        </button>
+        <button
+          onClick={() => setMobileTab('feed')}
+          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+        >
+          Feed
+        </button>
+      </div>
+
       <SSEDebugPanel />
     </div>
   );

@@ -53,12 +53,15 @@ export interface DiscoveredAgent {
   existing_agent_id?: string;
 }
 
+export type ExecutionProfile = 'auto' | 'cost' | 'quality' | 'gemini';
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
+  execution_profile?: ExecutionProfile;
   assigned_agent_id: string | null;
   created_by_agent_id: string | null;
   workspace_id: string;
@@ -254,6 +257,7 @@ export interface CreateTaskRequest {
   title: string;
   description?: string;
   priority?: TaskPriority;
+  execution_profile?: ExecutionProfile;
   assigned_agent_id?: string;
   created_by_agent_id?: string;
   business_id?: string;

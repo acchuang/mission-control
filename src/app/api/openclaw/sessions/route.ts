@@ -45,8 +45,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const sessions = await client.listSessions();
-    return NextResponse.json({ sessions });
+    const sessionsResponse = await client.listSessions();
+
+    // Gateway may return either an array or an envelope like { sessions: [...] }
+    const normalizedSessions = Array.isArray(sessionsResponse)
+      ? sessionsResponse
+      : Array.isArray((sessionsResponse as { sessions?: unknown }).sessions)
+        ? ((sessionsResponse as { sessions: OpenClawSession[] }).sessions)
+        : [];
+
+    return NextResponse.json({ sessions: normalizedSessions });
   } catch (error) {
     console.error('Failed to list OpenClaw sessions:', error);
     return NextResponse.json(

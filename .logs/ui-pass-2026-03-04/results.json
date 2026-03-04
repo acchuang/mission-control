@@ -1,0 +1,31 @@
+{
+  "checks": [
+    {
+      "name": "Dashboard renders Mission Queue",
+      "ok": false,
+      "detail": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n  - waiting for getByText('Mission Queue').first() to be visible\n    34 × locator resolved to hidden <span class=\"text-sm font-medium uppercase tracking-[0.2em] text-mc-text-secondary\">Mission Queue</span>\n"
+    },
+    {
+      "name": "New panels visible",
+      "ok": false,
+      "detail": "locator.waitFor: Timeout 15000ms exceeded.\nCall log:\n  - waiting for getByText('AI Model Tracking').first() to be visible\n    34 × locator resolved to hidden <div class=\"inline-flex items-center gap-2 text-sm font-medium\">…</div>\n"
+    },
+    {
+      "name": "Task modal has execution modes",
+      "ok": false,
+      "detail": "locator.click: Timeout 10000ms exceeded.\nCall log:\n  - waiting for locator('button').filter({ hasText: /New Task|Add Task|Create Task/i }).first()\n    - locator resolved to <button class=\"flex items-center gap-2 px-3 py-2 bg-mc-accent text-mc-bg rounded-md text-sm font-medium hover:bg-mc-accent/90\">…</button>\n  - attempting click action\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n    - waiting 20ms\n    2 × waiting for element to be visible, enabled and stable\n      - element is not visible\n    - retrying click action\n      - waiting 100ms\n    19 × waiting for element to be visible, enabled and stable\n       - element is not visible\n     - retrying click action\n       - waiting 500ms\n"
+    },
+    {
+      "name": "Sidebar tabs clickable",
+      "ok": true,
+      "detail": [
+        "Tasks",
+        "Approvals",
+        "Calendar",
+        "Memory",
+        "Docs"
+      ]
+    }
+  ],
+  "errors": []
+}

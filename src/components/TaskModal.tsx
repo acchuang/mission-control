@@ -9,7 +9,7 @@ import { DeliverablesList } from './DeliverablesList';
 import { SessionsList } from './SessionsList';
 import { PlanningTab } from './PlanningTab';
 import { AgentModal } from './AgentModal';
-import type { Task, TaskPriority, TaskStatus } from '@/lib/types';
+import type { ExecutionProfile, Task, TaskPriority, TaskStatus } from '@/lib/types';
 
 type TabType = 'overview' | 'planning' | 'activity' | 'deliverables' | 'sessions';
 
@@ -36,6 +36,7 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
     title: task?.title || '',
     description: task?.description || '',
     priority: task?.priority || 'normal' as TaskPriority,
+    execution_profile: (task?.execution_profile || 'auto') as ExecutionProfile,
     status: task?.status || 'inbox' as TaskStatus,
     assigned_agent_id: task?.assigned_agent_id || '',
     due_date: task?.due_date || '',
@@ -275,6 +276,31 @@ export function TaskModal({ task, onClose, workspaceId }: TaskModalProps) {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Cost/Quality Toggle */}
+          <div>
+            <label className="block text-sm font-medium mb-1">Execution Mode</label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { id: 'auto', label: 'Auto' },
+                { id: 'cost', label: 'Cost' },
+                { id: 'quality', label: 'Quality' },
+                { id: 'gemini', label: 'Gemini' },
+              ] as const).map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, execution_profile: opt.id })}
+                  className={`px-3 py-2 rounded border text-sm ${form.execution_profile === opt.id ? 'border-mc-accent bg-mc-accent/15 text-mc-accent' : 'border-mc-border bg-mc-bg hover:border-mc-accent/50'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-mc-text-secondary mt-1">
+              Auto = policy routing • Cost = cheaper model • Quality = stronger model • Gemini = force Gemini 2.5 Pro
+            </p>
           </div>
 
           {/* Assigned Agent */}

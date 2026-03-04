@@ -4,10 +4,45 @@ import { queryOne, queryAll, run } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { broadcast } from '@/lib/events';
 import { getProjectsPath, getMissionControlUrl } from '@/lib/config';
+import { routeModelForTask, GEMINI_FALLBACK_MODEL } from '@/lib/model-routing';
 import type { Task, Agent, OpenClawSession } from '@/lib/types';
 
 interface RouteParams {
   params: Promise<{ id: string }>;
+}
+
+function normalizeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return String(error);
+  }
+}
+
+function classifyFallbackReason(error: unknown): 'timeout/rate-limit' | 'hard-failure' {
+  const message = normalizeErrorMessage(error).toLowerCase();
+
+  const timeoutOrRateLimit = /(timeout|timed out|time out|request timeout|gateway timeout|rate.?limit|too many requests|\b429\b)/i.test(message);
+  if (timeoutOrRateLimit) {
+    return 'timeout/rate-limit';
+  }
+
+  return 'hard-failure';
+}
+
+function shouldUseGeminiFallback(error: unknown): boolean {
+  const message = normalizeErrorMessage(error).toLowerCase();
+
+  const timeoutOrRateLimit = /(timeout|timed out|time out|request timeout|gateway timeout|rate.?limit|too many requests|\b429\b)/i.test(message);
+  const hardFailure = /(internal server error|\b5\d\d\b|service unavailable|temporarily unavailable|provider|overloaded|connection reset|socket hang up|network error|upstream error|failed)/i.test(message);
+
+  return timeoutOrRateLimit || hardFailure;
 }
 
 /**
@@ -131,6 +166,13 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     }
 
     // Build task message for agent
+    const routed = routeModelForTask(task);
+    const hasTaskOverride = task.execution_profile && task.execution_profile !== 'auto';
+    const selectedModel = hasTaskOverride ? routed.model : (agent.model || routed.model);
+    const selectedModelReason = hasTaskOverride
+      ? routed.reason
+      : (agent.model ? 'agent override' : routed.reason);
+
     const priorityEmoji = {
       low: '🔵',
       normal: '⚪',
@@ -149,7 +191,8 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 **Title:** ${task.title}
 ${task.description ? `**Description:** ${task.description}\n` : ''}
 **Priority:** ${task.priority.toUpperCase()}
-${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
+**Execution Model:** ${selectedModel} (${selectedModelReason})
+${selectedModel !== GEMINI_FALLBACK_MODEL ? `**Fallback Model:** ${GEMINI_FALLBACK_MODEL} (hard failure, timeout, rate limit)\n` : ''}${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
 **Task ID:** ${task.id}
 
 **OUTPUT DIRECTORY:** ${taskProjectDir}
@@ -173,11 +216,61 @@ If you need help or clarification, ask the orchestrator.`;
       // Use sessionKey for routing to the agent's session
       // Format: agent:main:{openclaw_session_id}
       const sessionKey = `agent:main:${session.openclaw_session_id}`;
-      await client.call('chat.send', {
-        sessionKey,
-        message: taskMessage,
-        idempotencyKey: `dispatch-${task.id}-${Date.now()}`
-      });
+      const idempotencyKey = `dispatch-${task.id}-${Date.now()}`;
+
+      let deliveredModel = selectedModel;
+      let deliveredModelReason = selectedModelReason;
+      let fallbackApplied = false;
+
+      try {
+        await client.call('chat.send', {
+          sessionKey,
+          message: taskMessage,
+          model: selectedModel,
+          idempotencyKey,
+        });
+      } catch (primaryErr) {
+        const fallbackReason = classifyFallbackReason(primaryErr);
+        console.warn(`[Dispatch] Primary model send failed (${selectedModel}), reason=${fallbackReason}:`, primaryErr);
+
+        const canUseGeminiFallback = selectedModel !== GEMINI_FALLBACK_MODEL && shouldUseGeminiFallback(primaryErr);
+
+        if (canUseGeminiFallback) {
+          try {
+            await client.call('chat.send', {
+              sessionKey,
+              message: taskMessage,
+              model: GEMINI_FALLBACK_MODEL,
+              idempotencyKey,
+            });
+            deliveredModel = GEMINI_FALLBACK_MODEL;
+            deliveredModelReason = `fallback from ${selectedModel} due to ${fallbackReason}`;
+            fallbackApplied = true;
+          } catch (geminiErr) {
+            console.warn('[Dispatch] Gemini fallback failed, retrying without explicit model:', geminiErr);
+            await client.call('chat.send', {
+              sessionKey,
+              message: taskMessage,
+              idempotencyKey,
+            });
+            deliveredModel = 'gateway-default';
+            deliveredModelReason = `fallback chain failed after ${fallbackReason}; retried without model override`;
+            fallbackApplied = true;
+          }
+        } else {
+          console.warn('[Dispatch] Retrying without explicit model override:', primaryErr);
+          await client.call('chat.send', {
+            sessionKey,
+            message: taskMessage,
+            idempotencyKey,
+          });
+          deliveredModel = 'gateway-default';
+          deliveredModelReason = `${selectedModelReason}; retried without model override after ${fallbackReason}`;
+          fallbackApplied = true;
+        }
+      }
+
+      const modelTrace = fallbackApplied ? `${selectedModel} -> ${deliveredModel}` : deliveredModel;
 
       // Update task status to in_progress
       run(
@@ -205,7 +298,7 @@ If you need help or clarification, ask the orchestrator.`;
       run(
         `INSERT INTO events (id, type, agent_id, task_id, message, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [eventId, 'task_dispatched', agent.id, task.id, `Task "${task.title}" dispatched to ${agent.name}`, now]
+        [eventId, 'task_dispatched', agent.id, task.id, `Task "${task.title}" dispatched to ${agent.name} using ${modelTrace} (${deliveredModelReason})`, now]
       );
 
       // Log dispatch activity to task_activities table (for Activity tab)
@@ -213,7 +306,7 @@ If you need help or clarification, ask the orchestrator.`;
       run(
         `INSERT INTO task_activities (id, task_id, agent_id, activity_type, message, created_at)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [activityId, task.id, agent.id, 'status_changed', `Task dispatched to ${agent.name} - Agent is now working on this task`, now]
+        [activityId, task.id, agent.id, 'status_changed', `Task dispatched to ${agent.name} with model ${modelTrace} (${deliveredModelReason}) - Agent is now working on this task`, now]
       );
 
       return NextResponse.json({
@@ -221,6 +314,11 @@ If you need help or clarification, ask the orchestrator.`;
         task_id: task.id,
         agent_id: agent.id,
         session_id: session.openclaw_session_id,
+        model: deliveredModel,
+        model_reason: deliveredModelReason,
+        requested_model: selectedModel,
+        requested_model_reason: selectedModelReason,
+        fallback_applied: fallbackApplied,
         message: 'Task dispatched to agent'
       });
     } catch (err) {

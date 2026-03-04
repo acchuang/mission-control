@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Plus, ArrowRight, Folder, Users, CheckSquare, Trash2, AlertTriangle } from 'lucide-react';
+import { Plus, ArrowRight, Folder, Users, CheckSquare, Trash2, AlertTriangle, ShieldCheck, ShieldAlert, ShieldX } from 'lucide-react';
 import Link from 'next/link';
 import type { WorkspaceStats } from '@/lib/types';
 
@@ -9,9 +9,28 @@ export function WorkspaceDashboard() {
   const [workspaces, setWorkspaces] = useState<WorkspaceStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [opsCount, setOpsCount] = useState(0);
+  const [opsOk, setOpsOk] = useState(true);
 
   useEffect(() => {
     loadWorkspaces();
+  }, []);
+
+  useEffect(() => {
+    const loadOps = async () => {
+      try {
+        const res = await fetch('/api/ops/active-tasks');
+        const data = await res.json();
+        setOpsOk(Boolean(data?.ok));
+        setOpsCount(Number(data?.count || 0));
+      } catch {
+        setOpsOk(false);
+      }
+    };
+
+    loadOps();
+    const timer = setInterval(loadOps, 15000);
+    return () => clearInterval(timer);
   }, []);
 
   const loadWorkspaces = async () => {
@@ -49,13 +68,40 @@ export function WorkspaceDashboard() {
               <span className="text-2xl">🦞</span>
               <h1 className="text-xl font-bold">Mission Control</h1>
             </div>
-            <button
-              onClick={() => setShowCreateModal(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-mc-accent text-mc-bg rounded-lg font-medium hover:bg-mc-accent/90"
-            >
-              <Plus className="w-4 h-4" />
-              New Workspace
-            </button>
+            <div className="flex items-center gap-3">
+              <div
+                className={`hidden md:inline-flex items-center gap-1 px-3 py-2 rounded-lg border text-xs font-medium ${
+                  !opsOk
+                    ? 'bg-red-500/20 border-red-400/40 text-red-300'
+                    : opsCount > 0
+                      ? 'bg-amber-500/20 border-amber-400/40 text-amber-300'
+                      : 'bg-emerald-500/20 border-emerald-400/40 text-emerald-300'
+                }`}
+                title="Live ops health"
+              >
+                {!opsOk ? <ShieldX className="w-3.5 h-3.5" /> : opsCount > 0 ? <ShieldAlert className="w-3.5 h-3.5" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                OPS {opsCount}
+              </div>
+              <Link
+                href="/token-usage"
+                className="px-4 py-2 border border-mc-border rounded-lg text-mc-text-secondary hover:bg-mc-bg-tertiary"
+              >
+                Token Dashboard
+              </Link>
+              <Link
+                href="/openclaw"
+                className="px-4 py-2 border border-mc-border rounded-lg text-mc-text-secondary hover:bg-mc-bg-tertiary"
+              >
+                OpenClaw Control
+              </Link>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="flex items-center gap-2 px-4 py-2 bg-mc-accent text-mc-bg rounded-lg font-medium hover:bg-mc-accent/90"
+              >
+                <Plus className="w-4 h-4" />
+                New Workspace
+              </button>
+            </div>
           </div>
         </div>
       </header>
