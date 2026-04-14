@@ -4,7 +4,7 @@ import { queryOne, queryAll, run } from '@/lib/db';
 import { getOpenClawClient } from '@/lib/openclaw/client';
 import { broadcast } from '@/lib/events';
 import { getProjectsPath, getMissionControlUrl } from '@/lib/config';
-import { routeModelForTask, GEMINI_FALLBACK_MODEL } from '@/lib/model-routing';
+import { routeModelForTask, GEMINI_FALLBACK_MODELS } from '@/lib/model-routing';
 import type { Task, Agent, OpenClawSession } from '@/lib/types';
 
 interface RouteParams {
@@ -192,7 +192,7 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 ${task.description ? `**Description:** ${task.description}\n` : ''}
 **Priority:** ${task.priority.toUpperCase()}
 **Execution Model:** ${selectedModel} (${selectedModelReason})
-${selectedModel !== GEMINI_FALLBACK_MODEL ? `**Fallback Model:** ${GEMINI_FALLBACK_MODEL} (hard failure, timeout, rate limit)\n` : ''}${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
+${!GEMINI_FALLBACK_MODELS.includes(selectedModel as typeof GEMINI_FALLBACK_MODELS[number]) ? `**Fallback Models:** ${GEMINI_FALLBACK_MODELS.join(' → ')} (hard failure, timeout, rate limit)\n` : ''}${task.due_date ? `**Due:** ${task.due_date}\n` : ''}
 **Task ID:** ${task.id}
 
 **OUTPUT DIRECTORY:** ${taskProjectDir}
@@ -233,21 +233,32 @@ If you need help or clarification, ask the orchestrator.`;
         const fallbackReason = classifyFallbackReason(primaryErr);
         console.warn(`[Dispatch] Primary model send failed (${selectedModel}), reason=${fallbackReason}:`, primaryErr);
 
-        const canUseGeminiFallback = selectedModel !== GEMINI_FALLBACK_MODEL && shouldUseGeminiFallback(primaryErr);
+        const fallbackModels = GEMINI_FALLBACK_MODELS.filter((model) => model !== selectedModel);
+        const canUseGeminiFallback = fallbackModels.length > 0 && shouldUseGeminiFallback(primaryErr);
 
         if (canUseGeminiFallback) {
-          try {
-            await client.call('chat.send', {
-              sessionKey,
-              message: taskMessage,
-              model: GEMINI_FALLBACK_MODEL,
-              idempotencyKey,
-            });
-            deliveredModel = GEMINI_FALLBACK_MODEL;
-            deliveredModelReason = `fallback from ${selectedModel} due to ${fallbackReason}`;
-            fallbackApplied = true;
-          } catch (geminiErr) {
-            console.warn('[Dispatch] Gemini fallback failed, retrying without explicit model:', geminiErr);
+          let fallbackDelivered = false;
+
+          for (const fallbackModel of fallbackModels) {
+            try {
+              await client.call('chat.send', {
+                sessionKey,
+                message: taskMessage,
+                model: fallbackModel,
+                idempotencyKey,
+              });
+              deliveredModel = fallbackModel;
+              deliveredModelReason = `fallback from ${selectedModel} to ${fallbackModel} due to ${fallbackReason}`;
+              fallbackApplied = true;
+              fallbackDelivered = true;
+              break;
+            } catch (geminiErr) {
+              console.warn(`[Dispatch] Gemini fallback failed (${fallbackModel}), trying next fallback:`, geminiErr);
+            }
+          }
+
+          if (!fallbackDelivered) {
+            console.warn('[Dispatch] Gemini fallback chain failed, retrying without explicit model');
             await client.call('chat.send', {
               sessionKey,
               message: taskMessage,

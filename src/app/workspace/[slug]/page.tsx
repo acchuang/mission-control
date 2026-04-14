@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronLeft, KanbanSquare, Users, Activity } from 'lucide-react';
@@ -31,6 +31,8 @@ export default function WorkspacePage() {
   const [notFound, setNotFound] = useState(false);
   const [menuDockSide, setMenuDockSide] = useState<'left' | 'right'>('left');
   const [mobileTab, setMobileTab] = useState<'queue' | 'agents' | 'feed'>('queue');
+  const [desktopTab, setDesktopTab] = useState<'queue' | 'agents' | 'feed'>('queue');
+  const openClawFailureCount = useRef(0);
 
   // Connect to SSE for real-time updates
   useSSE();
@@ -71,9 +73,9 @@ export default function WorkspacePage() {
         
         // Fetch workspace-scoped data
         const [agentsRes, tasksRes, eventsRes] = await Promise.all([
-          fetch(`/api/agents?workspace_id=${workspaceId}`),
-          fetch(`/api/tasks?workspace_id=${workspaceId}`),
-          fetch('/api/events'),
+          fetch(`/api/agents?workspace_id=${workspaceId}`, { cache: 'no-store' }),
+          fetch(`/api/tasks?workspace_id=${workspaceId}`, { cache: 'no-store' }),
+          fetch('/api/events', { cache: 'no-store' }),
         ]);
 
         if (agentsRes.ok) setAgents(await agentsRes.json());
@@ -93,27 +95,42 @@ export default function WorkspacePage() {
     // Check OpenClaw connection separately (non-blocking)
     async function checkOpenClaw() {
       try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const openclawRes = await fetch('/api/openclaw/status?lite=1', { cache: 'no-store' });
 
-        const openclawRes = await fetch('/api/openclaw/status', { signal: controller.signal });
-        clearTimeout(timeoutId);
+        if (!openclawRes.ok) {
+          throw new Error(`OpenClaw status failed: ${openclawRes.status}`);
+        }
 
-        if (openclawRes.ok) {
-          const status = await openclawRes.json();
-          setIsOnline(status.connected);
+        const status = await openclawRes.json();
+        if (status?.connected) {
+          openClawFailureCount.current = 0;
+          setIsOnline(true);
+        } else {
+          openClawFailureCount.current += 1;
+          if (openClawFailureCount.current >= 2) {
+            setIsOnline(false);
+          }
         }
       } catch {
-        setIsOnline(false);
+        openClawFailureCount.current += 1;
+        if (openClawFailureCount.current >= 2) {
+          setIsOnline(false);
+        }
       }
     }
 
     async function runOpenClawSync() {
       try {
-        await fetch('/api/openclaw/sync', {
+        const res = await fetch('/api/openclaw/sync', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          cache: 'no-store',
         });
+
+        if (res.ok) {
+          openClawFailureCount.current = 0;
+          setIsOnline(true);
+        }
       } catch (error) {
         console.error('OpenClaw sync failed:', error);
       }
@@ -129,7 +146,7 @@ export default function WorkspacePage() {
     // Poll for events every 30 seconds (SSE fallback - increased from 5s)
     const eventPoll = setInterval(async () => {
       try {
-        const res = await fetch('/api/events?limit=20');
+        const res = await fetch('/api/events?limit=20', { cache: 'no-store' });
         if (res.ok) {
           setEvents(await res.json());
         }
@@ -141,7 +158,7 @@ export default function WorkspacePage() {
     // Poll tasks as SSE fallback every 60 seconds (increased from 10s)
     const taskPoll = setInterval(async () => {
       try {
-        const res = await fetch(`/api/tasks?workspace_id=${workspaceId}`);
+        const res = await fetch(`/api/tasks?workspace_id=${workspaceId}`, { cache: 'no-store' });
         if (res.ok) {
           const newTasks: Task[] = await res.json();
           const currentTasks = useMissionControl.getState().tasks;
@@ -164,28 +181,13 @@ export default function WorkspacePage() {
 
     // Sync OpenClaw sessions/cron health into tasks/events every 30s
     const openclawSyncPoll = setInterval(async () => {
-      try {
-        await fetch('/api/openclaw/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } catch (error) {
-        console.error('Failed to run OpenClaw sync poll:', error);
-      }
+      await runOpenClawSync();
     }, 30000);
 
-    // Check OpenClaw connection every 30 seconds (kept as-is for monitoring)
+    // Check OpenClaw connection every 10 seconds for faster badge recovery
     const connectionCheck = setInterval(async () => {
-      try {
-        const res = await fetch('/api/openclaw/status');
-        if (res.ok) {
-          const status = await res.json();
-          setIsOnline(status.connected);
-        }
-      } catch {
-        setIsOnline(false);
-      }
-    }, 30000);
+      await checkOpenClaw();
+    }, 10000);
 
     return () => {
       clearInterval(eventPoll);
@@ -261,35 +263,45 @@ export default function WorkspacePage() {
       </div>
 
       <div className="hidden md:flex flex-1 overflow-hidden panel-shell">
-        {menuDockSide === 'left' && (
-          <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+        {desktopTab === 'queue' && (
+          <>
+            {menuDockSide === 'left' && (
+              <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+            )}
+
+            <MissionQueue workspaceId={workspace.id} />
+
+            {menuDockSide === 'right' && (
+              <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+            )}
+
+            <LiveFeed />
+          </>
         )}
 
-        <MissionQueue workspaceId={workspace.id} />
-
-        {menuDockSide === 'right' && (
-          <AgentsSidebar workspaceId={workspace.id} dockSide={menuDockSide} onDockChange={setMenuDockSide} />
+        {desktopTab === 'agents' && (
+          <AgentsSidebar workspaceId={workspace.id} dockSide="left" onDockChange={setMenuDockSide} fullWidth />
         )}
 
-        <LiveFeed />
+        {desktopTab === 'feed' && <LiveFeed />}
       </div>
 
       <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 hidden md:flex items-center gap-2 rounded-xl border border-mc-border bg-mc-bg-secondary/95 backdrop-blur-sm px-2 py-2 shadow-lg">
         <button
-          onClick={() => setMobileTab('queue')}
-          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+          onClick={() => setDesktopTab('queue')}
+          className={`px-3 py-1.5 rounded-lg text-xs ${desktopTab === 'queue' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary hover:bg-mc-border'}`}
         >
           Queue
         </button>
         <button
-          onClick={() => setMobileTab('agents')}
-          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+          onClick={() => setDesktopTab('agents')}
+          className={`px-3 py-1.5 rounded-lg text-xs ${desktopTab === 'agents' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary hover:bg-mc-border'}`}
         >
           Agents
         </button>
         <button
-          onClick={() => setMobileTab('feed')}
-          className="px-3 py-1.5 rounded-lg text-xs bg-mc-bg-tertiary hover:bg-mc-border"
+          onClick={() => setDesktopTab('feed')}
+          className={`px-3 py-1.5 rounded-lg text-xs ${desktopTab === 'feed' ? 'bg-mc-accent text-mc-bg font-medium' : 'bg-mc-bg-tertiary hover:bg-mc-border'}`}
         >
           Feed
         </button>

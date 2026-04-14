@@ -29,7 +29,7 @@ export function Header({ workspace }: HeaderProps) {
   useEffect(() => {
     const loadSubAgentCount = async () => {
       try {
-        const res = await fetch('/api/openclaw/sessions');
+        const res = await fetch('/api/openclaw/sessions', { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
 
@@ -57,7 +57,7 @@ export function Header({ workspace }: HeaderProps) {
   useEffect(() => {
     const loadOpsHealth = async () => {
       try {
-        const res = await fetch('/api/ops/active-tasks');
+        const res = await fetch('/api/ops/active-tasks', { cache: 'no-store' });
         const data = await res.json();
         setOpsOk(Boolean(data?.ok));
         setOpsCount(Number(data?.count || 0));

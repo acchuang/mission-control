@@ -1,6 +1,12 @@
 import type { ExecutionProfile, Task } from './types';
 
-export const GEMINI_FALLBACK_MODEL = 'google-gemini-cli/gemini-2.5-pro';
+export const GEMINI_FALLBACK_MODELS = [
+  'google-gemini-cli/gemini-3.1-flash-lite',
+  'google-gemini-cli/gemini-2.5-flash-lite',
+  'google-gemini-cli/gemini-2.5-pro',
+] as const;
+
+export const GEMINI_FALLBACK_MODEL = GEMINI_FALLBACK_MODELS[0];
 
 export type ModelRoute = {
   model: string;

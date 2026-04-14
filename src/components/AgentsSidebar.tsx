@@ -37,6 +37,7 @@ interface AgentsSidebarProps {
   workspaceId?: string;
   dockSide?: 'left' | 'right';
   onDockChange?: (side: 'left' | 'right') => void;
+  fullWidth?: boolean;
 }
 
 interface FileEntry {
@@ -99,7 +100,7 @@ interface CronJob {
   };
 }
 
-export function AgentsSidebar({ workspaceId, dockSide = 'left', onDockChange }: AgentsSidebarProps) {
+export function AgentsSidebar({ workspaceId, dockSide = 'left', onDockChange, fullWidth = false }: AgentsSidebarProps) {
   const {
     agents,
     tasks,
@@ -762,7 +763,7 @@ export function AgentsSidebar({ workspaceId, dockSide = 'left', onDockChange }: 
     <aside
       draggable
       onDragEnd={handleDockDragEnd}
-      className={`bg-mc-bg-secondary/70 border-mc-border flex flex-col transition-all duration-300 ease-in-out w-full ${dockSide === 'left' ? 'md:border-r' : 'md:border-l'} ${isMinimized ? 'md:w-12' : 'md:w-64'}`}
+      className={`bg-mc-bg-secondary/70 border-mc-border flex flex-col transition-all duration-300 ease-in-out w-full ${dockSide === 'left' ? 'md:border-r' : 'md:border-l'} ${fullWidth ? 'md:w-full' : isMinimized ? 'md:w-12' : 'md:w-64'}`}
     >
       <div className="p-3 border-b border-mc-border space-y-3">
         <div className="flex items-center justify-between">

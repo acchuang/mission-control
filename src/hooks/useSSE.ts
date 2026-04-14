@@ -18,7 +18,6 @@ export function useSSE() {
   const {
     updateTask,
     addTask,
-    setIsOnline,
     selectedTask,
     setSelectedTask,
   } = useMissionControl();
@@ -44,7 +43,6 @@ export function useSSE() {
 
       eventSource.onopen = () => {
         debug.sse('Connected');
-        setIsOnline(true);
         isConnecting = false;
         // Clear any pending reconnect
         if (reconnectTimeoutRef.current) {
@@ -114,7 +112,6 @@ export function useSSE() {
 
       eventSource.onerror = (error) => {
         debug.sse('Connection error', error);
-        setIsOnline(false);
         isConnecting = false;
 
         // Close the connection
@@ -145,5 +142,5 @@ export function useSSE() {
     };
   // selectedTask removed from deps to prevent re-connection loop
   // We use selectedTaskIdRef to check the current selected task ID without triggering re-renders
-  }, [addTask, updateTask, setIsOnline, setSelectedTask]);
+  }, [addTask, updateTask, setSelectedTask]);
 }

@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
 import { existsSync, readFileSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
