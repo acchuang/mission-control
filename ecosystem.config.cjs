@@ -1,19 +1,21 @@
 module.exports = {
-  apps: [{
-    name: 'mission-control',
-    script: '/opt/homebrew/bin/npx',
-    args: 'next start -p 4000',
-    cwd: '/Users/nomames/projects/mc-security-fix',
-    env: {
-      NODE_ENV: 'production',
-      PORT: '4000'
+  apps: [
+    {
+      name: 'mission-control',
+      script: 'npm',
+      args: 'start',
+      cwd: '/home/alan/.openclaw/workspace/projects/mission-control',
+      env: {
+        NODE_ENV: 'production',
+        PORT: '4000',
+        OPENCLAW_GATEWAY_URL: 'ws://127.0.0.1:18789',
+      },
+      instances: 1,
+      autorestart: true,
+      max_restarts: 10,
+      restart_delay: 3000,
+      watch: false,
+      max_memory_restart: '512M',
     },
-    // PM2 settings
-    instances: 1,
-    autorestart: true,
-    max_restarts: 10,
-    restart_delay: 3000,
-    watch: false,
-    max_memory_restart: '512M'
-  }]
+  ],
 };
